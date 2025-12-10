@@ -97,6 +97,19 @@ async function run() {
       res.send(result);
     })
 
+     app.get('/reviews',async(req,res)=>{
+      const {foodId} = req.query
+      const query = {}
+      if(foodId){
+        query.foodId= foodId
+      }
+      const result = (await reviewCollection.find(query).sort({date:-1}).toArray())
+      res.send(result);
+    })
+
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
