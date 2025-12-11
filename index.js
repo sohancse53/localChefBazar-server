@@ -32,6 +32,8 @@ async function run() {
     const userCollection = db.collection('users'); 
     const mealCollection = db.collection('meals'); 
     const reviewCollection = db.collection('reviews'); 
+    const favoriteCollection = db.collection('favorite'); 
+    const orderCollection = db.collection('orders'); 
 
 
     // ------------------------user related api--------------------------------
@@ -89,7 +91,7 @@ async function run() {
 
 
 
-    // ---------------------------------comments related Api----------------------------
+    // ---------------------------------reviews related Api----------------------------
     app.post('/reviews',async(req,res)=>{
       const reviewInfo = req.body;
       reviewInfo.date = new Date();
@@ -110,6 +112,39 @@ async function run() {
 
 
 
+
+
+    //--------------------- favorite food related apis--------------------
+
+
+    app.post('/favorite-food',async(req,res)=>{
+      const favoriteInfo = req.body;
+      const {userEmail ,foodId} = favoriteInfo; 
+      const exits = await favoriteCollection.findOne({userEmail,foodId});
+      if(exits){
+        return res.send('user already exits');
+      }
+      favoriteInfo.addedTime = new Date();
+      const result= await  favoriteCollection.insertOne(favoriteInfo);
+      res.send(result);
+    })
+
+
+
+
+    // ------------------------------------order related apis-----------------------------------
+
+      app.post('/orders',async(req,res)=>{
+        const orderInfo = req.body;
+        const result = await orderCollection.insertOne(orderInfo);
+        res.send(result);
+      })
+
+
+
+
+
+      
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
