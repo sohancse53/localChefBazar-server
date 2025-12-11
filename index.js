@@ -93,11 +93,33 @@ async function run() {
       res.send(result);
     });
 
+
+    app.patch('/reviews/:id',async(req,res)=>{
+      const id = req.params.id;
+      const updatedReview = req.body;
+      const query = {_id:new ObjectId(id)};
+      const update = {
+        $set:updatedReview
+      }
+      const result = await reviewCollection.updateOne(query,update);
+      res.send(result);
+    })
+
+    app.delete('/reviews/:id',async(req,res)=>{
+      const id= req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await reviewCollection.deleteOne(query);
+      res.send(result);
+    })
+
     app.get("/reviews", async (req, res) => {
-      const { foodId } = req.query;
+      const { foodId,reviewerEmail } = req.query;
       const query = {};
       if (foodId) {
         query.foodId = foodId;
+      }
+      if(reviewerEmail){
+        query.reviewerEmail = reviewerEmail;
       }
       const result = await reviewCollection
         .find(query)
