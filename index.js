@@ -48,7 +48,12 @@ async function run() {
     });
 
     app.get("/users", async (req, res) => {
-      const cursor = userCollection.find();
+      const {email} = req.query
+      const query = {}
+      if(email){
+        query.email = email
+      }
+      const cursor = userCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -134,7 +139,6 @@ async function run() {
      const cursor = orderCollection.find(query).sort({orderTime:-1})
      const result = await cursor.toArray();
      res.send(result);
-      
       
     });
 
