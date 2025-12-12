@@ -18,6 +18,15 @@ const client = new MongoClient(uri, {
   },
 });
 
+
+//---------------------------- generate Chef ID--------------------------------------
+function generateChefCode() {
+  return "CHEF" + String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+}
+
+
+
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -196,6 +205,86 @@ async function run() {
       const result = await roleRequestCollection.insertOne(roleRequestInfo);
       res.send(result)
     })
+
+
+app.patch('/role-request/:id/approved', async (req, res) => {
+  const id = req.params.id;
+  const { requestType, userEmail } = req.body;
+
+
+  const requestData = await roleRequestCollection.findOne({ _id: new ObjectId(id) });
+
+  if (!requestData) {
+    return res.status(404).send({ message: 'Request not found' });
+  }
+
+  if (requestData.requestStatus === 'approved') {
+    return res.send({ alreadyApproved: true });
+  }
+
+  let updateUserResult;
+
+
+  if (requestType === 'chef') {
+    const chefId = generateChefCode();
+    updateUserResult = await userCollection.updateOne(
+      { email: userEmail },
+      { $set: { role: 'chef', chefId } }
+    );
+  }
+
+  if (requestType === 'admin') {
+    updateUserResult = await userCollection.updateOne(
+      { email: userEmail },
+      { $set: { role: 'admin' } }
+    );
+  }
+
+ 
+  const updateRequest = await roleRequestCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { requestStatus: 'approved' } }
+  );
+
+  res.send({
+    updateUserResult,
+    updateRequest
+  });
+});
+
+
+
+app.patch('/role-request/:id/rejected',async(req,res)=>{
+  const id = req.params.id;
+  const request = req.body;
+  const {requestStatus} = request;
+  const exist = await roleRequestCollection.findOne({requestStatus:'rejected'})
+  if(exist){
+    return res.send('Already rejected');
+  }
+  const query = {_id: new ObjectId(id)};
+  const update = {
+    $set:{
+      requestStatus:'rejected'
+    }
+  }
+  const result = await roleRequestCollection.updateOne(query,update);
+  res.send(result);
+})
+
+
+
+    
+    app.get('/role-request',async(req,res)=>{
+      const cursor = roleRequestCollection.find().sort({requestTime:-1});
+      const result = await cursor.toArray();
+      res.send(result);
+    })
+
+
+
+//-------------------------------------- chef related api-----------------------------------
+ 
 
 
 
