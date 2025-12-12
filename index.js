@@ -29,6 +29,7 @@ async function run() {
     const reviewCollection = db.collection("reviews");
     const favoriteCollection = db.collection("favorite");
     const orderCollection = db.collection("orders");
+    const roleRequestCollection = db.collection("role-request");
 
     // ------------------------user related api--------------------------------
     app.post("/users", async (req, res) => {
@@ -184,7 +185,17 @@ async function run() {
 
 
 
-
+    //------------------------------Role Request Api------------------------------------
+    app.post('/role-request',async(req,res)=>{
+      const roleRequestInfo = req.body;
+      const  {userEmail,requestType} = roleRequestInfo;
+      const exist = await roleRequestCollection.findOne({userEmail,requestType})
+      if(exist){
+        return res.send('Already Requested For the role wait for response');
+      }
+      const result = await roleRequestCollection.insertOne(roleRequestInfo);
+      res.send(result)
+    })
 
 
 
