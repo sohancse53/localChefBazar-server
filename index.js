@@ -142,6 +142,24 @@ async function run() {
       res.send(result);
     });
 
+    app.get('/favorite-food',async(req,res)=>{
+      const {userEmail} = req.query;
+      const query = {}
+      if(userEmail){
+        query.userEmail = userEmail
+      }
+      const cursor = favoriteCollection.find(query).sort({addedTime:-1});
+      const result = await cursor.toArray();
+      res.send(result);
+    })
+
+    app.delete('/favorite-food/:id',async(req,res)=>{
+      const id= req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await favoriteCollection.deleteOne(query);
+      res.send(result);
+    })
+
 
 
     // ------------------------------------order related apis-----------------------------------
