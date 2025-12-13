@@ -74,6 +74,18 @@ async function run() {
       const result = await mealCollection.insertOne(mealInfo);
       res.send(result);
     })
+
+    app.patch('/meal/:id',async(req,res)=>{
+      const id= req.params.id;
+      const query = {_id:new ObjectId(id)};
+      const UpdatedMealInfo = req.body;
+      const update = {
+        $set:UpdatedMealInfo
+      }
+      const result = await mealCollection.updateOne(query,update);
+      res.send(result);
+    })
+
     
     app.get("/meals", async (req, res) => {
       const { sortOrder,chefEmail } = req.query;
