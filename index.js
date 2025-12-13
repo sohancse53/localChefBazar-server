@@ -69,6 +69,12 @@ async function run() {
     });
 
     // ------------------------------meals related api-----------------------------------------
+    app.post('/meals',async(req,res)=>{
+      const mealInfo = req.body;
+      const result = await mealCollection.insertOne(mealInfo);
+      res.send(result);
+    })
+    
     app.get("/meals", async (req, res) => {
       const { sortOrder } = req.query;
       console.log("Sort order:", sortOrder);
