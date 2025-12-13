@@ -86,6 +86,14 @@ async function run() {
       res.send(result);
     })
 
+
+      app.delete('/meal/:id',async(req,res)=>{
+      const id= req.params.id;
+      const query = {_id:new ObjectId(id)};
+      const result = await mealCollection.deleteOne(query);
+      res.send(result);
+    })
+
     
     app.get("/meals", async (req, res) => {
       const { sortOrder,chefEmail } = req.query;
