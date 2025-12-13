@@ -76,12 +76,14 @@ async function run() {
     })
     
     app.get("/meals", async (req, res) => {
-      const { sortOrder } = req.query;
+      const { sortOrder,chefEmail } = req.query;
       console.log("Sort order:", sortOrder);
-
+      
       const query = {};
       let sortOption = {};
-
+      if(chefEmail){
+        query.chefEmail = chefEmail;
+      }
       if (sortOrder === "Sort By Ascending") {
         sortOption = { price: 1 }; // ascending
       } else if (sortOrder === "Sort By Descending") {
