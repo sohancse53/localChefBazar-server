@@ -68,6 +68,14 @@ async function run() {
       res.send(result);
     });
 
+    // get user role 
+    app.get('/user/:email/role',async(req,res)=>{
+      const email = req.params.email;
+      const query = {email:email};
+      const user = await userCollection.findOne(query);
+      res.send(user);
+    })
+
     // ------------------------------meals related api-----------------------------------------
     app.post('/meals',async(req,res)=>{
       const mealInfo = req.body;
@@ -202,6 +210,8 @@ async function run() {
 
     // ------------------------------------order related apis-----------------------------------
 
+    // meal order request by chef id
+  
     app.post("/orders", async (req, res) => {
       const orderInfo = req.body;
       const result = await orderCollection.insertOne(orderInfo);
@@ -209,16 +219,60 @@ async function run() {
     });
 
     app.get("/orders", async (req, res) => {
-     const {userEmail} = req.query;
+     const {userEmail,chefId} = req.query;
      const query = {}
      if(userEmail){
       query.userEmail = userEmail;
+     }
+     if(chefId){
+      query.chefId = chefId
      }
      const cursor = orderCollection.find(query).sort({orderTime:-1})
      const result = await cursor.toArray();
      res.send(result);
       
     });
+
+
+    // accept order
+    app.patch('/order/accept/:id',async(req,res)=>{
+      const id = req.params.id;
+      
+      const query = {_id : new ObjectId(id)}
+      const update = {
+        $set:{
+          orderStatus:"accepted"
+        }
+      }
+      const result = await orderCollection.updateOne(query,update);
+      res.send(result);
+    })
+    // cancel order
+    app.patch('/order/cancel/:id',async(req,res)=>{
+      const id = req.params.id;
+      
+      const query = {_id : new ObjectId(id)}
+      const update = {
+        $set:{
+          orderStatus:"cancelled"
+        }
+      }
+      const result = await orderCollection.updateOne(query,update);
+      res.send(result);
+    })
+    // deliver order
+    app.patch('/order/deliver/:id',async(req,res)=>{
+      const id = req.params.id;
+      
+      const query = {_id : new ObjectId(id)}
+      const update = {
+        $set:{
+          orderStatus:"delivered"
+        }
+      }
+      const result = await orderCollection.updateOne(query,update);
+      res.send(result);
+    })
 
 
 
