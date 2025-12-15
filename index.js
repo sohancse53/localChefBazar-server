@@ -1,10 +1,54 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
+
 require("dotenv").config();
 app.use(express.json());
 app.use(cors());
+
 const port = process.env.PORT || 3000;
+
+const stripe = require('stripe')(process.env.PAYMENT_SECRET);
+
+
+
+// -----------------------------firebase-------------------------
+const admin = require("firebase-admin");
+const serviceAccount = require("./firebase_secret_auth.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
+// firebase token verifier
+const verifyFirebaseToken = async (req, res, next) => {
+  // console.log('Headers in the middleware',req.headers.authorization);
+  const authorization = req.headers.authorization;
+  if (!authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  try {
+    const token = authorization.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    console.log("decoded in the token", decoded);
+    req.decoded_email = decoded.email;
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "unauthorize access" });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.hjbjloq.mongodb.net/?appName=Cluster0`;
@@ -17,6 +61,9 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+
+
 
 
 //---------------------------- generate Chef ID--------------------------------------
@@ -40,6 +87,95 @@ async function run() {
     const orderCollection = db.collection("orders");
     const roleRequestCollection = db.collection("role-request");
 
+
+
+    //----------------------- verify admin--------------------------
+    const verifyAdmin = async(req,res,next)=>{
+      const email = req.decoded_email;
+      const query = {email:email};
+      const user = await userCollection.findOne(query);
+      if(!user || user.role !=='admin'){
+        return res.status.send('forbidden');
+      }
+      next();
+    }
+
+    // ------------------------------------verify chef---------------------------
+
+        const verifyChef = async(req,res,next)=>{
+      const email = req.decoded_email;
+      const query = {email:email};
+      const user = await userCollection.findOne(query);
+      if(!user || user.role !=='chef'){
+        return res.status.send('forbidden');
+      }
+      next();
+    }
+
+
+
+
+    // ---------------------------payment related apis-------------------------------
+
+    // post a payment  session 
+    app.post('/create-checkout-session',async(req,res)=>{
+      const paymentInfo = req.body;
+      const amount = parseInt(paymentInfo.cost)*100;
+       const session = await stripe.checkout.sessions.create({
+    line_items: [
+      {
+        price_data:{
+          unit_amount:amount,
+          currency:"usd",
+          product_data:{
+            name:paymentInfo.foodName,
+          },
+          
+        },
+        
+        quantity: 1,
+      },
+    ],
+
+    customer_email:paymentInfo.userEmail,
+    mode: 'payment',
+    metadata:{
+      foodId:paymentInfo.foodId,
+      orderId:paymentInfo.orderId,
+
+    },
+    success_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-cancel`,
+  });
+  console.log(session);
+  
+  res.send({url:session.url})
+
+    })
+
+    app.patch('/payment-success',async(req,res)=>{
+      const sessionId = req.query.session_id
+      // console.log(sessionId);
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      console.log('session retrived',session);
+      if(session.payment_status==='paid'){
+        const orderId = session.metadata.orderId;
+        const query = {_id:new ObjectId(orderId)}
+        const update = {
+          $set:{
+            paymentStatus: 'paid',
+        
+          }
+        }
+        const result = await orderCollection.updateOne(query,update);
+        res.send(result)
+      }
+
+      res.send({success:false})
+    })
+
+
+
     // ------------------------user related api--------------------------------
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
@@ -57,7 +193,23 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
+
+    // make user fraud patch api 
+    app.patch('/users/:id',async(req,res)=>{
+      const id = req.params.id;
+      const query = {_id:new ObjectId(id)};
+      const update = {
+        $set:{
+          status:'fraud'
+        }
+      }
+      const result = await userCollection.updateOne(query,update);
+      res.send(result);
+    })
+
+
+    // etake verifyFirebase, verify admin dio
+    app.get("/users",async (req, res) => {
       const {email} = req.query
       const query = {}
       if(email){
@@ -68,22 +220,25 @@ async function run() {
       res.send(result);
     });
 
+
+
     // get user role 
     app.get('/user/:email/role',async(req,res)=>{
       const email = req.params.email;
+
       const query = {email:email};
       const user = await userCollection.findOne(query);
       res.send(user);
     })
 
     // ------------------------------meals related api-----------------------------------------
-    app.post('/meals',async(req,res)=>{
+    app.post('/meals',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const mealInfo = req.body;
       const result = await mealCollection.insertOne(mealInfo);
       res.send(result);
     })
 
-    app.patch('/meal/:id',async(req,res)=>{
+    app.patch('/meal/:id',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const id= req.params.id;
       const query = {_id:new ObjectId(id)};
       const UpdatedMealInfo = req.body;
@@ -95,7 +250,7 @@ async function run() {
     })
 
 
-      app.delete('/meal/:id',async(req,res)=>{
+      app.delete('/meal/:id',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const id= req.params.id;
       const query = {_id:new ObjectId(id)};
       const result = await mealCollection.deleteOne(query);
@@ -132,7 +287,7 @@ async function run() {
     });
 
     // ---------------------------------reviews related Api----------------------------
-    app.post("/reviews", async (req, res) => {
+    app.post("/reviews", verifyFirebaseToken,async (req, res) => {
       const reviewInfo = req.body;
       reviewInfo.date = new Date();
       const result = await reviewCollection.insertOne(reviewInfo);
@@ -140,7 +295,7 @@ async function run() {
     });
 
 
-    app.patch('/reviews/:id',async(req,res)=>{
+    app.patch('/reviews/:id',verifyFirebaseToken,async(req,res)=>{
       const id = req.params.id;
       const updatedReview = req.body;
       const query = {_id:new ObjectId(id)};
@@ -151,14 +306,14 @@ async function run() {
       res.send(result);
     })
 
-    app.delete('/reviews/:id',async(req,res)=>{
+    app.delete('/reviews/:id',verifyFirebaseToken,async(req,res)=>{
       const id= req.params.id;
       const query = {_id: new ObjectId(id)};
       const result = await reviewCollection.deleteOne(query);
       res.send(result);
     })
 
-    app.get("/reviews", async (req, res) => {
+    app.get("/reviews",async (req, res) => {
       const { foodId,reviewerEmail } = req.query;
       const query = {};
       if (foodId) {
@@ -166,6 +321,7 @@ async function run() {
       }
       if(reviewerEmail){
         query.reviewerEmail = reviewerEmail;
+
       }
       const result = await reviewCollection
         .find(query)
@@ -176,7 +332,7 @@ async function run() {
 
     //--------------------- favorite food related apis--------------------
 
-    app.post("/favorite-food", async (req, res) => {
+    app.post("/favorite-food", verifyFirebaseToken,async (req, res) => {
       const favoriteInfo = req.body;
       const { userEmail, foodId } = favoriteInfo;
       const exits = await favoriteCollection.findOne({ userEmail, foodId });
@@ -188,18 +344,27 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/favorite-food',async(req,res)=>{
+
+    // reload dile logout hoye jai
+    app.get('/favorite-food',verifyFirebaseToken,async(req,res)=>{
       const {userEmail} = req.query;
+
+        if (userEmail !== req.decoded_email) {
+    return res.status(403).send({ message: "Forbidden: email mismatch" });
+  }
+
       const query = {}
       if(userEmail){
         query.userEmail = userEmail
+       
       }
       const cursor = favoriteCollection.find(query).sort({addedTime:-1});
       const result = await cursor.toArray();
       res.send(result);
     })
 
-    app.delete('/favorite-food/:id',async(req,res)=>{
+
+    app.delete('/favorite-food/:id',verifyFirebaseToken,async(req,res)=>{
       const id= req.params.id;
       const query = {_id: new ObjectId(id)};
       const result = await favoriteCollection.deleteOne(query);
@@ -212,7 +377,7 @@ async function run() {
 
     // meal order request by chef id
   
-    app.post("/orders", async (req, res) => {
+    app.post("/orders", verifyFirebaseToken,async (req, res) => {
       const orderInfo = req.body;
       const result = await orderCollection.insertOne(orderInfo);
       res.send(result);
@@ -235,7 +400,7 @@ async function run() {
 
 
     // accept order
-    app.patch('/order/accept/:id',async(req,res)=>{
+    app.patch('/order/accept/:id',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const id = req.params.id;
       
       const query = {_id : new ObjectId(id)}
@@ -247,8 +412,9 @@ async function run() {
       const result = await orderCollection.updateOne(query,update);
       res.send(result);
     })
+
     // cancel order
-    app.patch('/order/cancel/:id',async(req,res)=>{
+    app.patch('/order/cancel/:id',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const id = req.params.id;
       
       const query = {_id : new ObjectId(id)}
@@ -260,10 +426,11 @@ async function run() {
       const result = await orderCollection.updateOne(query,update);
       res.send(result);
     })
+
+
     // deliver order
-    app.patch('/order/deliver/:id',async(req,res)=>{
+    app.patch('/order/deliver/:id',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const id = req.params.id;
-      
       const query = {_id : new ObjectId(id)}
       const update = {
         $set:{
@@ -277,7 +444,7 @@ async function run() {
 
 
     //------------------------------Role Request Api------------------------------------
-    app.post('/role-request',async(req,res)=>{
+    app.post('/role-request',verifyFirebaseToken,async(req,res)=>{
       const roleRequestInfo = req.body;
       const  {userEmail,requestType} = roleRequestInfo;
       const exist = await roleRequestCollection.findOne({userEmail,requestType})
@@ -289,7 +456,7 @@ async function run() {
     })
 
 
-app.patch('/role-request/:id/approved', async (req, res) => {
+app.patch('/role-request/:id/approved', verifyFirebaseToken,verifyAdmin,async (req, res) => {
   const id = req.params.id;
   const { requestType, userEmail } = req.body;
 
@@ -336,23 +503,30 @@ app.patch('/role-request/:id/approved', async (req, res) => {
 
 
 
-app.patch('/role-request/:id/rejected',async(req,res)=>{
+app.patch('/role-request/:id/rejected',verifyFirebaseToken,verifyAdmin ,async (req, res) => {
   const id = req.params.id;
-  const request = req.body;
-  const {requestStatus} = request;
-  const exist = await roleRequestCollection.findOne({requestStatus:'rejected'})
-  if(exist){
-    return res.send('Already rejected');
+
+  const query = { _id: new ObjectId(id) };
+
+  //  check current request
+  const request = await roleRequestCollection.findOne(query);
+
+  if (!request) {
+    return res.status(404).send({ message: 'Request not found' });
   }
-  const query = {_id: new ObjectId(id)};
+
+  if (request.requestStatus === 'rejected') {
+    return res.send({ alreadyRejected: true });
+  }
+
+  //  update status
   const update = {
-    $set:{
-      requestStatus:'rejected'
-    }
-  }
-  const result = await roleRequestCollection.updateOne(query,update);
+    $set: { requestStatus: 'rejected' }
+  };
+
+  const result = await roleRequestCollection.updateOne(query, update);
   res.send(result);
-})
+});
 
 
 
