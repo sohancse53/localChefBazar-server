@@ -187,7 +187,7 @@ async function run() {
 
       const userExist = await userCollection.findOne({ email: email });
       if (userExist) {
-        res.send("user already exist");
+      return  res.send("user already exist");
       }
       const result = await userCollection.insertOne(userInfo);
       res.send(result);
@@ -233,6 +233,11 @@ async function run() {
 
     // ------------------------------meals related api-----------------------------------------
     app.post('/meals',verifyFirebaseToken,verifyChef,async(req,res)=>{
+      const email = req.decoded_email;
+      const fraudUser = await userCollection.findOne({email});
+      if(fraudUser.status==='fraud'){
+        return res.status(401).send("Unauthorize user can't oder");
+      }
       const mealInfo = req.body;
       const result = await mealCollection.insertOne(mealInfo);
       res.send(result);
@@ -378,10 +383,17 @@ async function run() {
     // meal order request by chef id
   
     app.post("/orders", verifyFirebaseToken,async (req, res) => {
+      const email = req.decoded_email;
+      const fraudUser = await userCollection.findOne({email});
+      if(fraudUser.status==='fraud'){
+        return res.status(401).send("fraud user can't order");
+      }
+
       const orderInfo = req.body;
       const result = await orderCollection.insertOne(orderInfo);
       res.send(result);
     });
+
 
     app.get("/orders", async (req, res) => {
      const {userEmail,chefId} = req.query;
@@ -539,8 +551,67 @@ app.patch('/role-request/:id/rejected',verifyFirebaseToken,verifyAdmin ,async (r
 
 
 
-//-------------------------------------- chef related api-----------------------------------
- 
+//-------------------------------------- Admin Statistics----------------------------------
+ app.get(
+  "/admin/statistics",
+  verifyFirebaseToken,
+  verifyAdmin,
+  async (req, res) => {
+
+    const paymentResult = await orderCollection.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+          orderStatus: "delivered"
+        }
+      },
+      {
+        $addFields: {
+          price: { $toDouble: "$price" },
+          quantity: { $toInt: "$quantity" }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaymentAmount: {
+            $sum: { $multiply: ["$price", "$quantity"] }
+          }
+        }
+      }
+    ]).toArray();
+
+    const totalPaymentAmount = paymentResult[0]?.totalPaymentAmount || 0;
+
+    const orderStatusCount = await orderCollection.aggregate([
+      {
+        $group: {
+          _id: "$orderStatus",
+          count: { $sum: 1 }
+        }
+      }
+    ]).toArray();
+
+    const ordersPending =
+      orderStatusCount.find(o => o._id === "pending")?.count || 0;
+
+    const ordersDelivered =
+      orderStatusCount.find(o => o._id === "delivered")?.count || 0;
+
+    const totalUsers = await userCollection.countDocuments();
+
+    res.send({
+      totalPaymentAmount,
+      totalUsers,
+      ordersPending,
+      ordersDelivered
+    });
+  }
+);
+
+
+
+
 
 
 
