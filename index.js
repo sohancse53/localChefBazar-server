@@ -231,6 +231,7 @@ async function run() {
       res.send(user);
     })
 
+
     // ------------------------------meals related api-----------------------------------------
     app.post('/meals',verifyFirebaseToken,verifyChef,async(req,res)=>{
       const email = req.decoded_email;
@@ -282,6 +283,14 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+
+
+    // latest meals sort by time
+    app.get('/daily-meals',async(req,res)=>{
+      const cursor = mealCollection.find().sort({createdAt:-1}).limit(6);
+      const result = await cursor.toArray();
+      res.send(result);
+    })
 
     // meals by id
     app.get("/meal/:id", async (req, res) => {
