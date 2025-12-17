@@ -264,25 +264,42 @@ async function run() {
     })
 
     
-    app.get("/meals", async (req, res) => {
-      const { sortOrder,chefEmail } = req.query;
-      console.log("Sort order:", sortOrder);
-      
-      const query = {};
-      let sortOption = {};
-      if(chefEmail){
-        query.chefEmail = chefEmail;
-      }
-      if (sortOrder === "Sort By Ascending") {
-        sortOption = { price: 1 }; // ascending
-      } else if (sortOrder === "Sort By Descending") {
-        sortOption = { price: -1 }; // descending
-      }
+app.get("/meals", async (req, res) => {
+  const { sortOrder, chefEmail, limit, skip ,search} = req.query;
 
-      const cursor = mealCollection.find(query).sort(sortOption);
-      const result = await cursor.toArray();
-      res.send(result);
-    });
+  const query = {};
+  let sortOption = {};
+
+  if (chefEmail) {
+    query.chefEmail = chefEmail;
+  }
+  if(search){
+    query.$or=[
+      {foodName :{$regex:search,$options:'i'}},
+      { chefName :{$regex:search,$options:'i'} },
+    ]
+  }
+
+  if (sortOrder === "Sort By Ascending") {
+    sortOption = { price: 1 };
+  } else if (sortOrder === "Sort By Descending") {
+    sortOption = { price: -1 };
+  }
+
+  const result = await mealCollection
+    .find(query)
+    .sort(sortOption)
+    .limit(parseInt(limit))
+    .skip(parseInt(skip))
+    .toArray();
+
+  const count = await mealCollection.countDocuments(query);
+
+  res.send({ result, count });
+});
+
+
+
 
 
     // latest meals sort by time
